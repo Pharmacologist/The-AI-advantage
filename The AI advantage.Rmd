@@ -1,0 +1,453 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+# Abstract
+Using a simulated workforce dataset filtered to Data Science roles, we explore how AI adoption relates to productivity, innovation, hiring, revenue, and layoff risk. Principal component analysis reveals an AI‑driven performance cluster distinct from workforce instability. Multiple linear regressions show AI adoption modestly raises revenue growth and innovation, but GDP growth and employee satisfaction are far stronger predictors. AI’s link to layoff risk is small once human‑centric factors are controlled. Random forest modelling offers no improvement over linear regression, indicating predominantly linear relationships. The findings portray AI as a performance enabler, not a wholesale replacement for talent, underscoring the need to balance technology adoption with human capital.
+
+
+# 1. Loading the Required Libraries
+```{r}
+# Load essential libraries for data manipulation, visualization, and modeling
+library(tidyverse)   # Collection of packages (dplyr, ggplot2, etc.)
+library(janitor)     # Simple functions for cleaning data
+library(corrplot)    # Correlation matrix visualization
+library(factoextra)  # Extract and visualize PCA/eigenvalues
+library(caret)       # Classification and regression training
+library(randomForest)# Random forest algorithm
+library(Metrics)     # Evaluation metrics (e.g., RMSE)
+library(psych)       # Descriptive statistics and factor analysis
+```
+
+# 2. Data Loading and Initial Inspection
+```{r}
+# Read the CSV file containing workforce transformation data
+# Note: The file path is specific to the local machine; adjust as needed.
+data <- read_csv("C:/Users/miraa/OneDrive/Documents/kaggle1/ai_workforce_transformation.csv")
+
+# Display the first 10 rows to understand the structure
+head(data, n=10)
+```
+
+## 2.1 Variable Descriptions
+A brief description of each column heading (as provided by the dataset documentation):
+
+year: Year of workforce and economic activity
+
+quarter: Financial quarter (Q1, Q2, Q3, Q4)
+
+company: Simulated company name
+
+industry: Industry sector of the company
+
+region: Geographic business region
+
+department: Company department or business unit
+
+economic_condition: Simulated macroeconomic environment
+
+work_model: Work arrangement type (Remote, Hybrid, Onsite)
+
+inflation_rate: Simulated inflation rate percentage
+
+interest_rate: Simulated interest rate percentage
+
+gdp_growth: Estimated GDP growth rate percentage
+
+ai_adoption_score: Level of AI adoption within the organization
+
+automation_level: Degree of business process automation
+
+employees_hired: Number of employees hired during the period
+
+layoffs: Number of employees laid off during the period
+
+attrition_rate: Percentage of employees leaving voluntarily
+
+employee_satisfaction: Overall employee satisfaction score
+
+avg_salary: Average employee salary in USD
+
+revenue_growth: Estimated company revenue growth percentage
+
+stock_growth: Simulated stock market growth percentage
+
+productivity_index: Overall workforce productivity score
+
+innovation_score: Organizational innovation and technology advancement score
+
+layoff_risk_score: Estimated workforce layoff risk score based on economic, operational, and workforce conditions
+
+# 3. Data Preprocessing
+## 3.1 Handling Missing Values
+```{r}
+# Count total missing values across the entire dataset
+sum(is.na(data))
+```
+
+```{r}
+# Remove rows containing any missing values (NA)
+data1 <- data %>% drop_na()
+```
+
+## 3.2 Removing Duplicate Rows
+```{r}
+# Remove any duplicate rows to ensure unique records
+data1 <- data1 %>% distinct()
+```
+
+## 3.3 Creating Numeric-Only Subset for Correlation
+```{r}
+# Select numeric variables for correlation analysis, dropping character columns
+data2 <- select(data1, c("year", "inflation_rate":"layoff_risk_score"))
+
+# Confirm the structure of the cleaned dataset
+head(data1, n=10)
+summary(data1)
+```
+
+# 4. Exploratory Data Analysis (EDA)
+## 4.1 Filtering for Data Science Department
+```{r}
+# Focus on the Data Science department to evaluate AI impact on business analysis
+data1.1 <- filter(data1, department == "Data Science")
+data1.2 <- select(data1.1, c("year", "inflation_rate":"layoff_risk_score"))
+
+# Quick look at the filtered data
+head(data1.1, n=10)
+```
+
+## 4.2 Correlation Matrix for Data Science Numeric Variables
+```{r}
+# Compute pairwise correlations using available observations
+correlation <- cor(data1.2, use = 'pairwise.complete.obs')
+
+# Visualize the correlation matrix with coefficients
+corrplot(correlation, method = "color", type = "upper", 
+         tl.col = "black", addCoef.col = "black", number.cex = 0.45,
+         tl.cex = 1, tl.srt = 45)
+```
+
+## 4.3 Unique Values in Character Columns
+```{r}
+# Explore the distinct categories in key categorical variables
+unique(data1$quarter)
+unique(data1$company)
+unique(data1$industry)
+unique(data1$region)
+unique(data1$department)
+unique(data1$economic_condition)
+unique(data1$work_model)
+```
+
+# 5. Impact of AI on Data Science Department
+To evaluate the impact of artificial intelligence on business analysis, we filter the dataset for the Data Science department from each company.
+```{r}
+data3 <- filter(data1, department == "Data Science")
+head(data3)
+describe(data3)   # psych::describe() gives descriptive statistics
+```
+
+## 5.1 Productivity vs AI Adoption (by Economic Condition and Work Model)
+```{r}
+plot5 <- ggplot(data = data3) +
+  geom_smooth(mapping = aes(x = ai_adoption_score, y = productivity_index, colour = industry), 
+              se = FALSE) + 
+  facet_grid(economic_condition ~ work_model) + 
+  labs(x = "AI Adoption Score", y = "Productivity index", 
+       title = "Productivity vs AI Adoption, by Economic Condition and Work model")
+plot5
+```
+Observations:
+Productivity increased noticeably with AI adoption in the AI industry during the pandemic for onsite workers. In contrast, productivity plateaued for remote workers with increasing AI adoption during recession, and for hybrid workers during the AI boom.
+
+## 5.2 Innovation Score vs AI Adoption
+```{r}
+plot6 <- ggplot(data = data3) +
+  geom_smooth(mapping = aes(x = ai_adoption_score, y = innovation_score, colour = industry), 
+              se = FALSE) + 
+  facet_grid(economic_condition ~ work_model) + 
+  labs(x = "AI Adoption Score", y = "Innovation score", 
+       title = "Innovation score vs AI Adoption, by Economic Condition and Work model")
+plot6
+```
+Observations:
+The gaming industry appears to have lower productivity (innovation score) with increased AI adoption compared to other industries during recession, irrespective of the work model.
+
+## 5.3 Employees Hired vs AI Adoption
+```{r}
+plot7 <- ggplot(data = data3) +
+  geom_smooth(mapping = aes(x = ai_adoption_score, y = employees_hired, colour = industry), 
+              se = FALSE) + 
+  facet_grid(economic_condition ~ work_model) + 
+  labs(x = "AI Adoption Score", y = "Employees hired", 
+       title = "Employees hired vs AI Adoption, by Economic Condition and Work model")
+plot7
+```
+Observations:
+The cybersecurity industry experienced a sharp but brief reduction in onsite hiring during the AI boom. Similarly, during the economic growth phase, employee recruitment decreased with increasing AI adoption for onsite workers, followed by a stabilization and then a further decline.
+
+## 5.4 Revenue Growth vs AI Adoption
+```{r}
+plot8 <- ggplot(data = data3) +
+  geom_smooth(mapping = aes(x = ai_adoption_score, y = revenue_growth, colour = industry), 
+              se = FALSE) + 
+  facet_grid(economic_condition ~ work_model) + 
+  labs(x = "AI Adoption Score", y = "Revenue growth", 
+       title = "Revenue growth vs AI Adoption, by Economic Condition and Work model")
+plot8
+```
+Observations:
+Revenue growth dropped in the gaming industry with increased AI adoption, especially pronounced for onsite workers during recession. However, during the pandemic, the gaming industry recovered revenue growth compared to other industries with an increase in AI adoption across all work models.
+
+## 5.5 Automation Level vs AI Adoption
+```{r}
+plot9 <- ggplot(data = data3) +
+  geom_smooth(mapping = aes(x = ai_adoption_score, y = automation_level, colour = industry), 
+              se = FALSE) + 
+  facet_grid(economic_condition ~ work_model) + 
+  labs(x = "AI Adoption Score", y = "Automation level", 
+       title = "Automation level vs AI Adoption, by Economic Condition and Work model")
+plot9
+```
+Observations:
+A marked increase in automation level with AI adoption was observed in the later part of the curve for the FinTech industry, particularly for hybrid workers during recession.
+
+To determine whether differences between industries across economic conditions and work models are statistically significant, ANOVA followed by Tukey's HSD could be conducted. However, given the synthetic nature of the dataset, strong conclusions cannot be drawn.
+
+# 6. Principal Component Analysis (PCA)
+## 6.1 Preparing Data for PCA
+```{r}
+# Select only numeric variables from the Data Science subset
+data4 <- select(data3, "year", "inflation_rate":"layoff_risk_score")
+
+# Scale the data to have mean=0 and variance=1 (necessary for PCA)
+data5 <- scale(data4, center = TRUE, scale = TRUE)
+```
+
+## 6.2 Performing PCA
+```{r}
+# Perform PCA on the scaled data; already centered and scaled
+pca_result <- prcomp(data5, center = FALSE, scale. = FALSE)
+
+# View summary to decide how many principal components to retain
+summary(pca_result)
+```
+
+## 6.3 Visualizing Variable Contributions
+```{r}
+# Plot correlation circle showing variable contributions to PC1 and PC2
+plot10 <- fviz_pca_var(pca_result,
+                       col.var = "contrib",          # Color by contribution
+                       gradient.cols = c("blue", "yellow", "red"),
+                       repel = TRUE,                 # Prevent label overlap
+                       title = "PCA - Correlation Circle of Variables")
+plot10
+```
+
+PCA Findings:
+PCA revealed two dominant dimensions explaining 44.7% of the total variance. The first component captured an AI‑driven organizational performance dimension: higher AI adoption, automation, innovation, productivity, employee satisfaction, and revenue growth all loaded positively. On the opposite side, layoff risk, layoffs, and attrition clustered together, representing workforce instability. The close proximity of AI adoption and automation suggests that digital transformation initiatives are strongly associated with process automation and innovation.
+
+# 7. Multiple Linear Regression
+## 7.1 Revenue Growth Prediction
+```{r}
+# Build linear model to predict revenue growth
+model_rev <- lm(
+  revenue_growth ~
+    ai_adoption_score +
+    automation_level +
+    productivity_index +
+    innovation_score +
+    employee_satisfaction +
+    gdp_growth +
+    inflation_rate,
+  data = data4
+)
+
+summary(model_rev)
+```
+Interpretation:
+For every 1-unit increase in AI adoption score, revenue growth increases by 0.0798 units, holding other variables constant.
+
+```{r}
+summary(model_rev)$r.squared
+```
+The model explains approximately 24.8% of the variation in revenue growth (R² = 0.248, p < 0.001). AI adoption, productivity, employee satisfaction, and GDP growth were significant positive predictors. GDP growth exhibited the strongest effect. Automation level, innovation score, and inflation rate were not significant predictors after controlling for other variables.
+
+## 7.2 Layoff Risk Score Prediction
+```{r}
+# Predict layoff risk score using organizational and workforce metrics
+layoff_model <- lm(
+  layoff_risk_score ~
+    ai_adoption_score +
+    automation_level +
+    revenue_growth +
+    productivity_index +
+    employee_satisfaction +
+    attrition_rate,
+  data = data1
+)
+
+summary(layoff_model)
+```
+Interpretation:
+
+The set of predictors collectively has a significant effect (p < 0.001).
+
+The model explains approximately 53.5% of the variation in layoff risk score (R² = 0.535), indicating a good fit according to typical business analytics thresholds (<30% weak, 30-50% moderate, 50-70% good).
+
+A 1-point increase in AI adoption score increases layoff risk by 0.107 points, suggesting a modest positive association.
+
+Revenue growth, employee satisfaction, and productivity significantly reduce layoff risk, with attrition rate being the strongest positive driver.
+
+Automation level was not a significant predictor after controlling for other factors.
+
+## 7.3 Innovation Score Prediction
+```{r}
+# Predict innovation score
+model_innova <- lm(
+  innovation_score ~
+    ai_adoption_score +
+    automation_level +
+    productivity_index +
+    revenue_growth +
+    employee_satisfaction +
+    gdp_growth +
+    inflation_rate,
+  data = data4
+)
+
+summary(model_innova)
+```
+Interpretation:
+The model explains 60.4% of the variation in innovation score (R² = 0.604). AI adoption and productivity index were the only significant positive predictors. Productivity exhibited a near one‑to‑one relationship with innovation. Automation, revenue growth, employee satisfaction, GDP growth, and inflation were not significant after controlling for AI adoption and productivity.
+
+# 8. Revenue Growth Prediction Using Machine Learning
+## 8.1 Train/Test Split
+```{r}
+set.seed(123)  # for reproducibility
+
+trainIndex <- createDataPartition(
+  data3$revenue_growth,
+  p = 0.8,
+  list = FALSE
+)
+
+train <- data3[trainIndex, ]
+test <- data3[-trainIndex, ]
+```
+## 8.2 Random Forest Model
+```{r}
+# Train a random forest model with 500 trees
+rf_model <- randomForest(
+  revenue_growth ~
+    ai_adoption_score +
+    automation_level +
+    productivity_index +
+    innovation_score +
+    employee_satisfaction +
+    gdp_growth +
+    inflation_rate,
+  data = train,
+  ntree = 500
+)
+```
+
+## 8.3 Predictions and Model Comparison
+```{r}
+# Generate predictions on test set for both models
+pred_rf <- predict(rf_model, newdata = test)
+pred_lm <- predict(model_rev, newdata = test)
+```
+```{r}
+# Compute RMSE for both models
+rmse_rf <- rmse(test$revenue_growth, pred_rf)
+rmse_lm <- rmse(test$revenue_growth, pred_lm)
+
+rmse_rf
+rmse_lm
+```
+Interpretation:
+Linear regression performed very slightly better (lower RMSE) than the Random Forest. This suggests that the relationship between predictors and revenue growth is largely linear. The Random Forest’s extra complexity did not improve prediction, making the linear model more parsimonious and interpretable.
+
+## 8.4 Variable Importance (Random Forest)
+```{r}
+# Display variable importance from the random forest
+importance(rf_model)
+varImpPlot(rf_model)
+```
+Random Forest Insights:
+GDP growth was the most influential predictor, followed by employee satisfaction and productivity index. AI adoption score also contributed meaningfully. Interestingly, innovation score showed high importance in the Random Forest despite being insignificant in the linear model, indicating potential nonlinear relationships. Automation level was the least important predictor.
+```{r}
+# Compute standard regression performance metrics
+postResample(pred = pred_rf, obs = test$revenue_growth)
+```
+The Random Forest model achieved an R² of 0.241, with an RMSE of 10.38 and MAE of 8.29. This limited predictive power suggests that additional factors beyond those included may be required to fully explain revenue growth.
+
+# 9. Summary and Next Steps
+This analysis examined the simulated ai_workforce_transformation dataset, focusing on the Data Science department to understand how AI adoption correlates with organizational outcomes. Key findings include:
+
+PCA confirmed that AI adoption clusters with innovation, productivity, and revenue growth, opposite to workforce instability indicators.
+
+Linear models showed that AI adoption positively predicts revenue growth and innovation, but its association with layoff risk is comparatively modest.
+
+Revenue growth is better explained by economic factors (GDP growth) and employee satisfaction than by automation alone.
+
+Machine learning (Random Forest) did not outperform linear regression, indicating predominantly linear relationships in this synthetic dataset.
+
+Further work could explore interaction effects, non‑linear modeling for innovation, and subgroup analysis across industries. However, given the synthetic nature of the data, real‑world validation would be essential for drawing actionable business conclusions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
